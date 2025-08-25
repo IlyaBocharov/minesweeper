@@ -1,0 +1,363 @@
+    <!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Сапёр</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #151925;
+      --tile: #1b2133;
+      --tile-hover: #252c43;
+      --revealed: #0f172a;
+      --accent: #7c91ff;
+      --text: #e5e7eb;
+      --muted: #9aa3b2;
+      --danger: #ff6b6b;
+      --ok: #32d296;
+      --grid-gap: 4px;
+      --size: 36px;
+      --radius: 10px;
+      --shadow: 0 8px 20px rgba(0,0,0,.25);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: radial-gradient(1200px 600px at 20% 0%, #0b0f1b, #0f1115);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      color: var(--text);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .app { width: min(980px, 96vw); }
+    .panel {
+      background: linear-gradient(180deg, #151a28, #121620);
+      border: 1px solid #22283a; border-radius: 16px; box-shadow: var(--shadow);
+      padding: 16px; margin-bottom: 16px;
+    }
+    .title { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .title h1 { font-size: 20px; margin: 0; letter-spacing: .3px; }
+    .controls { display:flex; align-items:center; gap:10px; flex-wrap: wrap; }
+    .controls label { font-size: 13px; color: var(--muted); }
+    .controls input {
+      width: 70px; padding: 8px 10px; border-radius: 10px; border: 1px solid #26304a; background: #0f1320; color: var(--text);
+      outline: none;
+    }
+    .controls button {
+      padding: 10px 14px; border-radius: 12px; border: 1px solid #26304a; background: #0f1320; color: var(--text);
+      cursor: pointer; transition: .15s transform ease, .15s background ease;
+    }
+    .controls button:hover { transform: translateY(-1px); background: #141a2b; }
+
+    .stats { display:flex; align-items:center; gap:14px; }
+    .stat { background:#0e1322; border:1px solid #26304a; padding:8px 12px; border-radius:10px; font-size:13px; color: var(--muted); }
+    .stat b { color: var(--text); font-weight:600; }
+
+    .grid {
+      display: grid; gap: var(--grid-gap);
+      background: #0b0f1c; padding: var(--grid-gap);
+      border-radius: 14px; border: 1px solid #22283a; box-shadow: var(--shadow);
+      user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+      touch-action: manipulation; position: relative; z-index: 10;
+    }
+    .cell {
+      width: var(--size); height: var(--size); display: grid; place-items: center; cursor: pointer;
+      border-radius: 10px; background: var(--tile); border: 1px solid #26304a; font-weight: 700;
+      transition: background .12s ease, transform .05s ease;
+      line-height: 1; font-size: 16px; -webkit-tap-highlight-color: transparent;
+    }
+    .cell:hover { background: var(--tile-hover); }
+    .cell.revealed { background: var(--revealed); border-color: #1e263a; cursor: default; }
+    .cell.mine.revealed { background: #2a0f19; border-color: #612537; }
+    .cell.flag::after { content: "⚑"; font-size: 18px; line-height: 1; }
+    .cell.question::after { content: "❓"; font-weight: 900; font-size: 16px; color: var(--muted); }
+    .cell.mine.revealed::after { content: "💣"; font-size: 18px; }
+
+    .n1 { color: #7c91ff; }
+    .n2 { color: #3ad0ff; }
+    .n3 { color: #32d296; }
+    .n4 { color: #ffd166; }
+    .n5 { color: #ff9f43; }
+    .n6 { color: #ff6b6b; }
+    .n7 { color: #ff6bd5; }
+    .n8 { color: #e5e7eb; }
+
+    .banner { margin-top: 12px; text-align: center; font-size: 14px; color: var(--muted); pointer-events: none; }
+    .banner span { padding: 6px 10px; border-radius: 10px; border: 1px solid #26304a; background:#0e1322; }
+    .banner .lose { color: var(--danger); border-color:#5d2a34; background:#210f14; }
+    .banner .win { color: var(--ok); border-color:#215342; background:#0c1714; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="panel title">
+      <h1>Сапёр — браузерная версия</h1>
+      <div class="controls">
+        <label>Строк: <input id="rows" type="number" min="5" max="30" value="10"></label>
+        <label>Колонок: <input id="cols" type="number" min="5" max="30" value="10"></label>
+        <label>Мины: <input id="mines" type="number" min="1" max="400" value="10"></label>
+        <button id="newGame">Новая игра</button>
+        <div class="stats">
+          <div class="stat">⏱ Время: <b id="time">0</b>s</div>
+          <div class="stat">💣 Мины: <b id="minesLeft">0</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="grid" class="grid"></div>
+    <div class="banner" id="banner"></div>
+  </div>
+
+  <script>
+    const gridEl = document.getElementById('grid');
+    const rowsEl = document.getElementById('rows');
+    const colsEl = document.getElementById('cols');
+    const minesEl = document.getElementById('mines');
+    const timeEl = document.getElementById('time');
+    const minesLeftEl = document.getElementById('minesLeft');
+    const bannerEl = document.getElementById('banner');
+
+    const newGameBtn = document.getElementById('newGame');
+
+    let R = 10, C = 10, M = 10;
+    let grid = [];
+    let revealedCount = 0;
+    let flags = 0;
+    let started = false;
+    let over = false;
+    let timer = null;
+    let time = 0;
+
+    // Делегированные обработчики: pointerdown — только для быстрой установки флага (ПКМ)
+    gridEl.addEventListener('pointerdown', (e)=>{
+      const target = e.target.closest('.cell');
+      if (!target || !gridEl.contains(target)) return;
+      if (over) return;
+      const r = parseInt(target.dataset.r, 10);
+      const c = parseInt(target.dataset.c, 10);
+      if (Number.isNaN(r) || Number.isNaN(c)) return;
+      if (e.pointerType === 'mouse' && (e.button === 2 || e.ctrlKey || e.metaKey)){
+        e.preventDefault();
+        // Помечаем ячейку, чтобы подавить следующий click после установки/снятия флага
+        target.dataset.suppressClick = '1';
+        toggleFlag(r,c);
+      }
+    });
+
+    // Классический click для открытия клетки; Shift+Click — пометка по циклу (флаг/вопрос)
+    gridEl.addEventListener('click', (e)=>{
+      const target = e.target.closest('.cell');
+      if (!target || !gridEl.contains(target)) return;
+      // Если предыдущим действием был флаг (ПКМ/⌘/Ctrl), подавляем этот click
+      if (target.dataset.suppressClick === '1'){
+        delete target.dataset.suppressClick;
+        return;
+      }
+      if (over) return;
+      const r = parseInt(target.dataset.r, 10);
+      const c = parseInt(target.dataset.c, 10);
+      if (Number.isNaN(r) || Number.isNaN(c)) return;
+      if (e.shiftKey) { target.dataset.suppressClick = '1'; toggleFlag(r,c); return; }
+      clickCell(r,c);
+    });
+
+    gridEl.addEventListener('contextmenu', (e)=>{
+      const target = e.target.closest('.cell');
+      if (!target || !gridEl.contains(target)) return;
+      e.preventDefault();
+      // Подавляем следующий click, чтобы кликом после контекстного меню не открыть клетку
+      target.dataset.suppressClick = '1';
+      const r = parseInt(target.dataset.r, 10);
+      const c = parseInt(target.dataset.c, 10);
+      if (Number.isNaN(r) || Number.isNaN(c)) return;
+      toggleFlag(r,c);
+    });
+
+    function makeCell(){
+      return { mine:false, revealed:false, flagged:false, question:false, n:0, el:null };
+    }
+
+    function resetTimer(){
+      if (timer) clearInterval(timer);
+      time = 0; timeEl.textContent = '0';
+      started = false;
+    }
+
+    function startTimer(){
+      if (started) return; started = true;
+      timer = setInterval(()=>{ time++; timeEl.textContent = String(time); }, 1000);
+    }
+
+    function inBounds(r,c){ return r>=0 && r<R && c>=0 && c<C; }
+    function idx(r,c){ return r*C + c; }
+
+    function neighbors(r,c){
+      const res = [];
+      for (let dr=-1; dr<=1; dr++)
+        for (let dc=-1; dc<=1; dc++){
+          if (dr===0 && dc===0) continue;
+          const nr=r+dr, nc=c+dc;
+          if (inBounds(nr,nc)) res.push([nr,nc]);
+        }
+      return res;
+    }
+
+    function placeMines(safeR, safeC){
+      // исключаем первую нажатую клетку и её соседей для честного старта
+      const forbidden = new Set();
+      forbidden.add(idx(safeR,safeC));
+      for (const [nr,nc] of neighbors(safeR,safeC)) forbidden.add(idx(nr,nc));
+
+      let placed = 0;
+      while (placed < M){
+        const r = Math.floor(Math.random()*R);
+        const c = Math.floor(Math.random()*C);
+        const k = idx(r,c);
+        if (forbidden.has(k)) continue;
+        if (!grid[r][c].mine){ grid[r][c].mine = true; placed++; }
+      }
+      // посчитать числа
+      for (let r=0;r<R;r++) for (let c=0;c<C;c++){
+        if (grid[r][c].mine) continue;
+        let n=0; for (const [nr,nc] of neighbors(r,c)) if (grid[nr][nc].mine) n++;
+        grid[r][c].n = n;
+      }
+    }
+
+    function renderGrid(){
+      gridEl.style.gridTemplateColumns = `repeat(${C}, var(--size))`;
+      gridEl.innerHTML = '';
+      for (let r=0;r<R;r++) for (let c=0;c<C;c++){
+        const cell = grid[r][c];
+        const el = document.createElement('div');
+        el.className = 'cell';
+        el.dataset.r = r; el.dataset.c = c;
+        cell.el = el; gridEl.appendChild(el);
+      }
+    }
+
+    function updateMinesLeft(){
+      minesLeftEl.textContent = Math.max(0, M - flags);
+    }
+
+    function floodReveal(r,c){
+      const stack = [[r,c]];
+      while (stack.length){
+        const [cr,cc] = stack.pop();
+        const cell = grid[cr][cc];
+        if (cell.revealed || cell.flagged) continue;
+        cell.revealed = true; revealedCount++;
+        paintCell(cr,cc);
+        if (cell.n===0){
+          for (const [nr,nc] of neighbors(cr,cc)){
+            const ncell = grid[nr][nc];
+            if (!ncell.revealed && !ncell.flagged) stack.push([nr,nc]);
+          }
+        }
+      }
+    }
+
+    function paintCell(r,c){
+      const cell = grid[r][c];
+      const el = cell.el;
+      // Сначала очистим числовые классы и базовые состояния
+      for (let i=1;i<=8;i++) el.classList.remove('n'+i);
+      el.classList.remove('revealed');
+      el.classList.remove('flag');
+      el.classList.remove('question');
+      el.classList.remove('mine');
+
+      // Применим актуальные состояния
+      if (cell.revealed) el.classList.add('revealed');
+      if (cell.flagged) el.classList.add('flag');
+      if (!cell.revealed && cell.question) el.classList.add('question');
+      if (cell.revealed && cell.mine) el.classList.add('mine');
+      if (cell.revealed){
+        if (cell.mine){ el.textContent = ''; }
+        else if (cell.n>0){ el.textContent = cell.n; el.classList.add('n'+cell.n); }
+        else { el.textContent = ''; }
+      } else {
+        el.textContent = '';
+      }
+    }
+
+    function revealAllMines(){
+      for (let r=0;r<R;r++) for (let c=0;c<C;c++){
+        const cell = grid[r][c]; if (cell.mine){ cell.revealed = true; paintCell(r,c); }
+      }
+    }
+
+    function checkWin(){
+      const totalSafe = R*C - M;
+      if (revealedCount === totalSafe){
+        over = true; clearInterval(timer);
+        bannerEl.innerHTML = '<span class="win">Победа! 🎉</span>';
+      }
+    }
+
+    function gameOver(){
+      over = true; clearInterval(timer);
+      revealAllMines();
+      bannerEl.innerHTML = '<span class="lose">Подорвался 💥 Игра окончена</span>';
+    }
+
+    function clickCell(r,c){
+      if (over) return;
+      if (!started){ startTimer(); placeMines(r,c); }
+      const cell = grid[r][c];
+      if (cell.flagged || cell.revealed) return;
+      if (cell.mine){ paintCell(r,c); gameOver(); return; }
+      if (cell.n===0){
+        // Для нулевой клетки полностью поручаем раскрытие floodReveal,
+        // чтобы стартовая клетка тоже была окрашена
+        floodReveal(r,c);
+      } else {
+        cell.revealed = true; revealedCount++;
+        paintCell(r,c);
+      }
+      checkWin();
+    }
+
+    function toggleFlag(r,c){
+      if (over) return;
+      const cell = grid[r][c];
+      if (cell.revealed) return;
+      // Цикл пометки: пусто -> флаг -> вопрос -> пусто
+      if (!cell.flagged && !cell.question){
+        cell.flagged = true; flags++;
+      } else if (cell.flagged){
+        cell.flagged = false; flags--; cell.question = true;
+      } else if (cell.question){
+        cell.question = false;
+      }
+      paintCell(r,c); updateMinesLeft();
+    }
+
+    function newGame(){
+      R = clamp(parseInt(rowsEl.value||10,10), 5, 30);
+      C = clamp(parseInt(colsEl.value||10,10), 5, 30);
+      const maxM = Math.max(1, R*C - 9); // минимум свободных клеток вокруг старта
+      M = clamp(parseInt(minesEl.value||10,10), 1, maxM);
+      rowsEl.value = R; colsEl.value = C; minesEl.value = M;
+
+      grid = Array.from({length:R},()=>Array.from({length:C},makeCell));
+      revealedCount = 0; flags = 0; over = false; bannerEl.textContent = '';
+      resetTimer(); updateMinesLeft(); renderGrid();
+    }
+
+    function clamp(x, lo, hi){ return Math.max(lo, Math.min(hi, x)); }
+
+    newGameBtn.addEventListener('click', newGame);
+    window.addEventListener('keydown', (e)=>{
+      // Быстрый рестарт физической клавишей R, независимо от раскладки
+      if (e.code === 'KeyR'){ newGame(); }
+    });
+
+    // Подсказка по управлению
+    bannerEl.innerHTML = '<span>ЛКМ — открыть | ПКМ/⌘/Ctrl/Shift — флаг → ? → пусто | R — рестарт</span>';
+
+    newGame();
+  </script>
+</body>
+</html>
